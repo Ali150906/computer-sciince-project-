@@ -1,324 +1,477 @@
-import sqlite3
-import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
-from ttkbootstrap import Style
+import sqlite3  # Library to handle SQLite database operations
+import tkinter as tk  # Library for creating GUI applications
+from tkinter import ttk  # Provides themed widgets for Tkinter
+from tkinter import messagebox  # For showing message boxes in the GUI
+from ttkbootstrap import Style  # For applying modern styling to the GUI
 
-# Create database tables if they don't exist
+# Function to create database tables if they don't already exist
 def create_tables(conn):
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # Create a cursor to execute SQL commands
 
-    # Create flashcard_sets table
+    # Create table to store flashcard set names
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS flashcard_sets (
-                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                   name TEXT NOT NULL
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique identifier for each set
+                   name TEXT NOT NULL                     -- Name of the set
         )
     ''')
 
-    # Create flashcards table with foreign key reference to flashcard_sets
+    # Create table to store individual flashcards
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS flashcards (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            set_id INTEGER NOT NULL,
-            word TEXT NOT NULL,
-            definition TEXT NOT NULL,
-            FOREIGN KEY (set_id) REFERENCES flashcard_sets(id)               
+            id INTEGER PRIMARY KEY AUTOINCREMENT,       -- Unique identifier for each card
+            set_id INTEGER NOT NULL,                   -- Foreign key to reference the flashcard set
+            word TEXT NOT NULL,                        -- The word or term for the flashcard
+            definition TEXT NOT NULL,                  -- The definition of the word
+            FOREIGN KEY (set_id) REFERENCES flashcard_sets(id)  -- Ensures referential integrity
         )
     ''')
 
-# Add a new flashcard set to the database
+# Function to add a new flashcard set to the database
 def add_set(conn, name):
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # Create a cursor for SQL commands
 
-    # Insert the set name into flashcard_sets table
+    # Insert the new set name into the flashcard_sets table
     cursor.execute('''
         INSERT INTO flashcard_sets (name)
         VALUES (?)
-    ''', (name,))
+    ''', (name,))  # Use parameterized query to prevent SQL injection
 
-    set_id = cursor.lastrowid
-    conn.commit()
+    set_id = cursor.lastrowid  # Get the ID of the newly inserted set
+    conn.commit()  # Save changes to the database
 
-    return set_id
+    return set_id  # Return the new set's ID
 
-# Function to add a flashcard to the database
+# Function to add a flashcard to a specific set in the database
 def add_card(conn, set_id, word, definition):
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # Create a cursor for SQL commands
 
-    # Execute SQL query to insert a new flashcard into the database
+    # Insert the word and definition into the flashcards table
     cursor.execute('''
         INSERT INTO flashcards (set_id, word, definition)
         VALUES (?, ?, ?)
-    ''', (set_id, word, definition))
+    ''', (set_id, word, definition))  # Parameterized query for safety
 
-    # Get the ID of the newly inserted card
-    card_id = cursor.lastrowid
-    conn.commit()
+    card_id = cursor.lastrowid  # Get the ID of the newly added flashcard
+    conn.commit()  # Save changes to the database
 
-    return card_id
+    return card_id  # Return the new card's ID
 
 # Function to retrieve all flashcard sets from the database
 def get_sets(conn):
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # Create a cursor for SQL commands
 
-    # Execite SQL query to fetch all flashcard sets
+    # Retrieve all sets from the flashcard_sets table
     cursor.execute('''
         SELECT id, name FROM flashcard_sets
     ''')
 
-    rows = cursor.fetchall()
-    sets = {row[1]: row[0] for row in rows} # Create a dictionary of sets (name: id)
+    rows = cursor.fetchall()  # Fetch all rows from the query result
+    # Convert rows to a dictionary with set name as the key and ID as the value
+    sets = {row[1]: row[0] for row in rows}
 
-    return sets
+    return sets  # Return the dictionary of sets
 
-# Function to retrieve all flashcards of a specific set
+# Function to retrieve all flashcards for a specific set
 def get_cards(conn, set_id):
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # Create a cursor for SQL commands
 
+    # Retrieve all cards belonging to the specified set ID
     cursor.execute('''
         SELECT word, definition FROM flashcards
         WHERE set_id = ?
     ''', (set_id,))
 
-    rows = cursor.fetchall()
-    cards = [(row[0], row[1]) for row in rows] # Create a list of cards (word, definition)
+    rows = cursor.fetchall()  # Fetch all rows from the query result
+    # Convert rows to a list of tuples (word, definition)
+    cards = [(row[0], row[1]) for row in rows]
 
-    return cards
+    return cards  # Return the list of cards
 
 # Function to delete a flashcard set from the database
 def delete_set(conn, set_id):
-    cursor = conn.cursor()
+    cursor = conn.cursor()  # Create a cursor for SQL commands
 
-    # Execute SQL query to delete a flashcard set
+    # Delete the set with the specified ID from the flashcard_sets table
     cursor.execute('''
         DELETE FROM flashcard_sets
         WHERE id = ?
     ''', (set_id,))
 
-    conn.commit()
-    sets_combobox.set('')
-    clear_flashcard_display()
-    populate_sets_combobox()
+    conn.commit()  # Save changes to the database
+    sets_combobox.set('')  # Clear the combobox selection
+    clear_flashcard_display()  # Clear the flashcard display
+    populate_sets_combobox()  # Refresh the dropdown menu with updated sets
 
-    # Clear the current_cards list and reset card_index
+    # Clear the current_cards list and reset the card_index
     global current_cards, card_index
-    current_cards = []
-    card_index = 0
+    current_cards = []  # Empty the current cards list
+    card_index = 0  # Reset the index for displaying cards
 
-# Function to create a new flashcard set
+# Function to create a new flashcard set via the GUI
 def create_set():
-    set_name = set_name_var.get()
-    if set_name:
-        if set_name not in get_sets(conn):
-            set_id = add_set(conn, set_name)
-            populate_sets_combobox()
-            set_name_var.set('')
+    set_name = set_name_var.get()  # Get the set name from the input field
+    if set_name:  # Ensure the set name is not empty
+        if set_name not in get_sets(conn):  # Check if the set already exists
+            set_id = add_set(conn, set_name)  # Add the set to the database
+            populate_sets_combobox()  # Refresh the dropdown menu
+            set_name_var.set('')  # Clear the input field
 
-            # Clear the input fields
+            # Clear the input fields for word and definition
             set_name_var.set('')
             word_var.set('')
             definition_var.set('')
 
+# Additional procedures continue similarly...
+
+# Main program execution starts here
+if __name__ == '__main__':
+    conn = sqlite3.connect('flashcards.db')  # Connect to the database
+    create_tables(conn)  # Ensure tables exist
+
+    # Create the main GUI window
+    root = tk.Tk()
+    root.title('Flashcards App')  # Set the title of the window
+    root.geometry('500x400')  # Set the size of the window
+
+    # Apply styling to the GUI
+    style = Style(theme='superhero')  # Use the "superhero" theme
+    style.configure('TLabel', font=('TkDefaultFont', 18))  # Style for labels
+    style.configure('TButton', font=('TkDefaultFont', 16))  # Style for buttons
+
+    # Define input variables for user input fields
+    set_name_var = tk.StringVar()  # For set name input
+    word_var = tk.StringVar()  # For word input
+    definition_var = tk.StringVar()  # For definition input
+import sqlite3  # Library to handle SQLite database operations
+import tkinter as tk  # Library for creating GUI applications
+from tkinter import ttk  # Provides themed widgets for Tkinter
+from tkinter import messagebox  # For showing message boxes in the GUI
+from ttkbootstrap import Style  # For applying modern styling to the GUI
+
+# Function to create database tables if they don't already exist
+def create_tables(conn):
+    cursor = conn.cursor()  # Create a cursor to execute SQL commands
+
+    # Create table to store flashcard set names
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS flashcard_sets (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique identifier for each set
+                   name TEXT NOT NULL                     -- Name of the set
+        )
+    ''')
+
+    # Create table to store individual flashcards
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS flashcards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,       -- Unique identifier for each card
+            set_id INTEGER NOT NULL,                   -- Foreign key to reference the flashcard set
+            word TEXT NOT NULL,                        -- The word or term for the flashcard
+            definition TEXT NOT NULL,                  -- The definition of the word
+            FOREIGN KEY (set_id) REFERENCES flashcard_sets(id)  -- Ensures referential integrity
+        )
+    ''')
+
+# Function to add a new flashcard set to the database
+def add_set(conn, name):
+    cursor = conn.cursor()  # Create a cursor for SQL commands
+
+    # Insert the new set name into the flashcard_sets table
+    cursor.execute('''
+        INSERT INTO flashcard_sets (name)
+        VALUES (?)
+    ''', (name,))  # Use parameterized query to prevent SQL injection
+
+    set_id = cursor.lastrowid  # Get the ID of the newly inserted set
+    conn.commit()  # Save changes to the database
+
+    return set_id  # Return the new set's ID
+
+# Function to add a flashcard to a specific set in the database
+def add_card(conn, set_id, word, definition):
+    cursor = conn.cursor()  # Create a cursor for SQL commands
+
+    # Insert the word and definition into the flashcards table
+    cursor.execute('''
+        INSERT INTO flashcards (set_id, word, definition)
+        VALUES (?, ?, ?)
+    ''', (set_id, word, definition))  # Parameterized query for safety
+
+    card_id = cursor.lastrowid  # Get the ID of the newly added flashcard
+    conn.commit()  # Save changes to the database
+
+    return card_id  # Return the new card's ID
+
+# Function to retrieve all flashcard sets from the database
+def get_sets(conn):
+    cursor = conn.cursor()  # Create a cursor for SQL commands
+
+    # Retrieve all sets from the flashcard_sets table
+    cursor.execute('''
+        SELECT id, name FROM flashcard_sets
+    ''')
+
+    rows = cursor.fetchall()  # Fetch all rows from the query result
+    # Convert rows to a dictionary with set name as the key and ID as the value
+    sets = {row[1]: row[0] for row in rows}
+
+    return sets  # Return the dictionary of sets
+
+# Function to retrieve all flashcards for a specific set
+def get_cards(conn, set_id):
+    cursor = conn.cursor()  # Create a cursor for SQL commands
+
+    # Retrieve all cards belonging to the specified set ID
+    cursor.execute('''
+        SELECT word, definition FROM flashcards
+        WHERE set_id = ?
+    ''', (set_id,))
+
+    rows = cursor.fetchall()  # Fetch all rows from the query result
+    # Convert rows to a list of tuples (word, definition)
+    cards = [(row[0], row[1]) for row in rows]
+
+    return cards  # Return the list of cards
+
+# Function to delete a flashcard set from the database
+def delete_set(conn, set_id):
+    cursor = conn.cursor()  # Create a cursor for SQL commands
+
+    # Delete the set with the specified ID from the flashcard_sets table
+    cursor.execute('''
+        DELETE FROM flashcard_sets
+        WHERE id = ?
+    ''', (set_id,))
+
+    conn.commit()  # Save changes to the database
+    sets_combobox.set('')  # Clear the combobox selection
+    clear_flashcard_display()  # Clear the flashcard display
+    populate_sets_combobox()  # Refresh the dropdown menu with updated sets
+
+    # Clear the current_cards list and reset the card_index
+    global current_cards, card_index
+    current_cards = []  # Empty the current cards list
+    card_index = 0  # Reset the index for displaying cards
+
+# Function to create a new flashcard set via the GUI
+def create_set():
+    set_name = set_name_var.get()  # Get the set name from the input field
+    if set_name:  # Ensure the set name is not empty
+        if set_name not in get_sets(conn):  # Check if the set already exists
+            set_id = add_set(conn, set_name)  # Add the set to the database
+            populate_sets_combobox()  # Refresh the dropdown menu
+            set_name_var.set('')  # Clear the input field
+
+            # Clear the input fields for word and definition
+            set_name_var.set('')
+            word_var.set('')
+            definition_var.set('')
+
+# Function to add a word-definition pair to a flashcard set
 def add_word():
-    set_name = set_name_var.get()
-    word = word_var.get()
-    definition = definition_var.get()
+    set_name = set_name_var.get()  # Get the set name from the input field
+    word = word_var.get()  # Get the word from the input field
+    definition = definition_var.get()  # Get the definition from the input field
 
-    if set_name and word and definition:
-        if set_name not in get_sets(conn):
-            set_id = add_set(conn, set_name)
+    if set_name and word and definition:  # Ensure none of the inputs are empty
+        if set_name not in get_sets(conn):  # If the set doesn't exist
+            set_id = add_set(conn, set_name)  # Create the set
         else:
-            set_id = get_sets(conn)[set_name]
+            set_id = get_sets(conn)[set_name]  # Get the ID of the existing set
 
-        add_card(conn, set_id, word, definition)
+        add_card(conn, set_id, word, definition)  # Add the flashcard to the set
 
+        # Clear the input fields after adding the card
         word_var.set('')
         definition_var.set('')
 
-        populate_sets_combobox()
+        populate_sets_combobox()  # Refresh the dropdown menu with updated sets
 
+# Function to populate the dropdown menu with flashcard set names
 def populate_sets_combobox():
-    sets_combobox['values'] = tuple(get_sets(conn).keys())
+    sets_combobox['values'] = tuple(get_sets(conn).keys())  # Update with set names
 
-# Function to delete a selected flashcard set
+# Function to delete the selected flashcard set
 def delete_selected_set():
-    set_name = sets_combobox.get()
+    set_name = sets_combobox.get()  # Get the selected set name from the dropdown
 
-    if set_name:
+    if set_name:  # Ensure a set is selected
+        # Ask for confirmation before deletion
         result = messagebox.askyesno(
             'Confirmation', f'Are you sure you want to delete the "{set_name}" set?'
         )
 
-        if result == tk.YES:
-            set_id = get_sets(conn)[set_name]
-            delete_set(conn, set_id)
-            populate_sets_combobox()
-            clear_flashcard_display()
+        if result == tk.YES:  # If the user confirms
+            set_id = get_sets(conn)[set_name]  # Get the set's ID
+            delete_set(conn, set_id)  # Delete the set
+            populate_sets_combobox()  # Refresh the dropdown menu
+            clear_flashcard_display()  # Clear the flashcard display
 
+# Function to handle selecting a flashcard set for learning
 def select_set():
-    set_name = sets_combobox.get()
+    set_name = sets_combobox.get()  # Get the selected set name from the dropdown
 
-    if set_name:
-        set_id = get_sets(conn)[set_name]
-        cards = get_cards(conn, set_id)
+    if set_name:  # Ensure a set is selected
+        set_id = get_sets(conn)[set_name]  # Get the set's ID
+        cards = get_cards(conn, set_id)  # Retrieve the cards for the selected set
 
-        if cards:
-            display_flashcards(cards)
+        if cards:  # If there are cards in the set
+            display_flashcards(cards)  # Display the cards
         else:
-            word_label.config(text="No cards in this set")
-            definition_label.config(text='')
+            word_label.config(text="No cards in this set")  # Show a "no cards" message
+            definition_label.config(text='')  # Clear the definition display
     else:
-        # Clear the current cards list and reset card index
+        # Clear the current_cards list and reset card_index if no set is selected
         global current_cards, card_index
         current_cards = []
         card_index = 0
         clear_flashcard_display()
 
+# Function to display the flashcards of the selected set
 def display_flashcards(cards):
     global card_index
     global current_cards
 
-    card_index = 0
-    current_cards = cards
+    card_index = 0  # Start at the first card
+    current_cards = cards  # Store the list of cards globally
     
-    # Clear the display
+    # Clear the display area
     if not cards:
-        clear_flashcard_display()
+        clear_flashcard_display()  # If no cards, clear the display
     else:
-        show_card()
+        show_card()  # Otherwise, display the first card
     
-    show_card()
+    show_card()  # Show the current card
 
+# Function to clear the flashcard display area
 def clear_flashcard_display():
-    word_label.config(text='')
-    definition_label.config(text='')
+    word_label.config(text='')  # Clear the word display
+    definition_label.config(text='')  # Clear the definition display
 
-# Function to display the current flashcards word
+# Function to display the current card's word
 def show_card():
     global card_index
     global current_cards
 
-    if current_cards:
-        if 0 <= card_index < len(current_cards):
-            word, _ = current_cards[card_index]
-            word_label.config(text=word)
-            definition_label.config(text='')
+    if current_cards:  # Ensure there are cards to display
+        if 0 <= card_index < len(current_cards):  # Ensure the index is valid
+            word, _ = current_cards[card_index]  # Get the current card's word
+            word_label.config(text=word)  # Display the word
+            definition_label.config(text='')  # Clear the definition
         else:
-            clear_flashcard_display()
+            clear_flashcard_display()  # Clear the display if index is invalid
     else:
-        clear_flashcard_display()
+        clear_flashcard_display()  # Clear the display if no cards are available
 
-# Function to flip the current card and display its definition
+# Function to flip the card and show its definition
 def flip_card():
     global card_index
     global current_cards
 
-    if current_cards:
-        _, definition = current_cards[card_index]
-        definition_label.config(text=definition)
+    if current_cards:  # Ensure there are cards to display
+        _, definition = current_cards[card_index]  # Get the current card's definition
+        definition_label.config(text=definition)  # Display the definition
 
 # Function to move to the next card
 def next_card():
     global card_index
     global current_cards
 
-    if current_cards:
-        card_index = min(card_index + 1, len(current_cards) -1)
-        show_card()
+    if current_cards:  # Ensure there are cards to display
+        card_index = min(card_index + 1, len(current_cards) - 1)  # Increment the index
+        show_card()  # Display the new card
 
 # Function to move to the previous card
 def prev_card():
     global card_index
     global current_cards
 
-    if current_cards:
-        card_index = max(card_index - 1, 0)
-        show_card()
+    if current_cards:  # Ensure there are cards to display
+        card_index = max(card_index - 1, 0)  # Decrement the index
+        show_card()  # Display the new card
 
 if __name__ == '__main__':
-    # Connect to the SQLite database and create tables
-    conn = sqlite3.connect('flashcards.db')
-    create_tables(conn)
+    # Connect to the SQLite database
+    conn = sqlite3.connect('flashcards.db')  # Create or open the database file
+    create_tables(conn)  # Create tables if they don't exist
 
     # Create the main GUI window
-    root = tk.Tk()
-    root.title('Flashcards App')
-    root.geometry('500x400')
+    root = tk.Tk()  # Initialize the main window
+    root.title('Flashcards App')  # Set the window title
+    root.geometry('500x400')  # Set the window size
 
-    # Apply styling to the GUI elements
-    style = Style(theme='superhero')
-    style.configure('TLabel', font=('TkDefaultFont', 18))
-    style.configure('TButton', font=('TkDefaultFont', 16))
+    # Apply styling to the GUI
+    style = Style(theme='superhero')  # Apply a modern theme
+    style.configure('TLabel', font=('TkDefaultFont', 18))  # Style for labels
+    style.configure('TButton', font=('TkDefaultFont', 16))  # Style for buttons
 
-    # Set up variables for storing user input
-    set_name_var = tk.StringVar()
-    word_var = tk.StringVar()
-    definition_var = tk.StringVar()
+    # Define variables for user input fields
+    set_name_var = tk.StringVar()  # Variable for the set name input
+    word_var = tk.StringVar()  # Variable for the word input
+    definition_var = tk.StringVar()  # Variable for the definition input
 
-    # Create a notebook widget to manage tabs
-    notebook = ttk.Notebook(root)
-    notebook.pack(fill='both', expand=True)
+    # Create a notebook widget to manage tabs in the application
+    notebook = ttk.Notebook(root)  # Create a notebook widget
+    notebook.pack(fill='both', expand=True)  # Add it to the main window
 
-    # Create the "Create Set" tab and its content
-    create_set_frame = ttk.Frame(notebook)
-    notebook.add(create_set_frame, text='Create Set')
+    # Create the "Create Set" tab
+    create_set_frame = ttk.Frame(notebook)  # Frame for the "Create Set" tab
+    notebook.add(create_set_frame, text='Create Set')  # Add the tab to the notebook
 
-    # Label and Entry widgets for entering set name, word and definition
-    ttk.Label(create_set_frame, text='Set Name:').pack(padx=5, pady=5)
-    ttk.Entry(create_set_frame, textvariable=set_name_var, width=30).pack(padx=5, pady=5)
+    # Input field and label for the set name
+    ttk.Label(create_set_frame, text='Set Name:').pack(padx=5, pady=5)  # Label for set name
+    ttk.Entry(create_set_frame, textvariable=set_name_var, width=30).pack(padx=5, pady=5)  # Input field
 
-    ttk.Label(create_set_frame, text='Word:').pack(padx=5, pady=5)
-    ttk.Entry(create_set_frame, textvariable=word_var, width=30).pack(padx=5, pady=5)
+    # Input field and label for the word
+    ttk.Label(create_set_frame, text='Word:').pack(padx=5, pady=5)  # Label for word
+    ttk.Entry(create_set_frame, textvariable=word_var, width=30).pack(padx=5, pady=5)  # Input field
 
-    ttk.Label(create_set_frame, text='Definition:').pack(padx=5, pady=5)
-    ttk.Entry(create_set_frame, textvariable=definition_var, width=30).pack(padx=5, pady=5)
+    # Input field and label for the definition
+    ttk.Label(create_set_frame, text='Definition:').pack(padx=5, pady=5)  # Label for definition
+    ttk.Entry(create_set_frame, textvariable=definition_var, width=30).pack(padx=5, pady=5)  # Input field
 
-    # Button to add a word to the set 
+    # Button to add a word to the set
     ttk.Button(create_set_frame, text='Add Word', command=add_word).pack(padx=5, pady=10)
-    
-    # Button to save the set 
+
+    # Button to save the set
     ttk.Button(create_set_frame, text='Save Set', command=create_set).pack(padx=5, pady=10)
 
-    # Create the "Select Set" tab and its content
-    select_set_frame = ttk.Frame(notebook)
-    notebook.add(select_set_frame, text="Select Set")
+    # Create the "Select Set" tab
+    select_set_frame = ttk.Frame(notebook)  # Frame for the "Select Set" tab
+    notebook.add(select_set_frame, text="Select Set")  # Add the tab to the notebook
 
-    # Combobox widget for selecting existing flashcard sets
-    sets_combobox = ttk.Combobox(select_set_frame, state='readonly')
-    sets_combobox.pack(padx=5, pady=40)
+    # Dropdown menu for selecting a flashcard set
+    sets_combobox = ttk.Combobox(select_set_frame, state='readonly')  # Read-only dropdown
+    sets_combobox.pack(padx=5, pady=40)  # Add the dropdown to the tab
 
-    # Button to select a set 
+    # Button to select a set
     ttk.Button(select_set_frame, text='Select Set', command=select_set).pack(padx=5, pady=5)
 
-    # Button to delete a set 
+    # Button to delete a set
     ttk.Button(select_set_frame, text='Delete Set', command=delete_selected_set).pack(padx=5, pady=5)
 
-    # Create the "Learn mode" tab and its content
-    flashcards_frame = ttk.Frame(notebook)
-    notebook.add(flashcards_frame, text='Learn Mode')
+    # Create the "Learn Mode" tab
+    flashcards_frame = ttk.Frame(notebook)  # Frame for the "Learn Mode" tab
+    notebook.add(flashcards_frame, text='Learn Mode')  # Add the tab to the notebook
 
-    # Initialize variables for tracking card index and current cards
-    card_index = 0
-    current_tabs = []
+    # Label to display the word on the flashcard
+    word_label = ttk.Label(flashcards_frame, text='', font=('TkDefaultFont', 24))  # Word label
+    word_label.pack(padx=5, pady=40)  # Add it to the tab
 
-    # Label to display the word on flashcards
-    word_label = ttk.Label(flashcards_frame, text='', font=('TkDefaultFont', 24))
-    word_label.pack(padx=5, pady=40)
+    # Label to display the definition on the flashcard
+    definition_label = ttk.Label(flashcards_frame, text='')  # Definition label
+    definition_label.pack(padx=5, pady=5)  # Add it to the tab
 
-    # Label to display the definition on flashcards
-    definition_label = ttk.Label(flashcards_frame, text='')
-    definition_label.pack(padx=5, pady=5)
-
-    # Button to flip the flashcard 
+    # Button to flip the flashcard and show the definition
     ttk.Button(flashcards_frame, text='Flip', command=flip_card).pack(side='left', padx=5, pady=5)
 
-    # Button to view the next flashcard 
+    # Button to view the next flashcard
     ttk.Button(flashcards_frame, text='Next', command=next_card).pack(side='right', padx=5, pady=5)
 
-    # Button to view the previous flashcard 
+    # Button to view the previous flashcard
     ttk.Button(flashcards_frame, text='Previous', command=prev_card).pack(side='right', padx=5, pady=5)
 
+    # Populate the dropdown menu with flashcard set names
     populate_sets_combobox()
 
-    root.mainloop()
+    root.mainloop()  # Run the application
